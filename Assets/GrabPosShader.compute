@@ -1,0 +1,25 @@
+// Each #kernel tells which function to compile; you can have many kernels
+#pragma kernel CSMain
+
+// Create a RenderTexture with enableRandomWrite flag and set it
+// with cs.SetTexture
+Texture2D<float4> mapTex;
+
+struct Particle
+{
+    float2 pos;
+    float2 dir;
+    int radius;
+};
+
+RWStructuredBuffer<Particle> particleBuffer;
+
+[numthreads(8,8,1)]
+void CSMain (uint3 id : SV_DispatchThreadID)
+{
+    // TODO: insert actual code here!
+
+    if (mapTex[id.xy].a != 0.0)
+        particleBuffer[mapTex[id.xy].z].pos = id.xy;
+
+}

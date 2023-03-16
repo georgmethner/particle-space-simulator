@@ -1,0 +1,145 @@
+// Each #kernel tells which function to compile; you can have many kernels
+#pragma kernel CSMain
+
+// Create a RenderTexture with enableRandomWrite flag and set it
+// with cs.SetTexture
+
+struct Particle
+{
+    float2 pos;
+    float2 dir;
+    float mass;
+    float pressure;
+};
+
+RWStructuredBuffer<Particle> particleBuffer;
+RWTexture2D<float4> mapTex;
+
+float drag;
+
+float2 calcDir(uint2 id)
+{
+    float2 pos = particleBuffer[id.x].pos;
+    float2 otherPos = particleBuffer[id.y].pos;
+    float dst = distance(pos, otherPos);
+    
+    //if (dst < 1.75 && particleBuffer[id.y].mass != 0)
+    //{
+    //    float mass = (particleBuffer[id.x].mass + particleBuffer[id.y].mass);
+    //    
+    //    float dir = particleBuffer[id.x].dir;
+    //    float otherDir = particleBuffer[id.y].dir;
+    //    
+    //    
+    //    if (!all(particleBuffer[id.y].dir == particleBuffer[id.x].dir))
+    //    {
+    //        //particleBuffer[id.x].dir = ((dir * particleBuffer[id.x].mass / mass) + (otherDir * particleBuffer[id.y].mass / mass));
+    //    }
+    //        
+    //    //particleBuffer[id.x].dir = 0.0;
+    //    if (particleBuffer[id.x].mass > particleBuffer[id.y].mass && !all(particleBuffer[id.y].dir == particleBuffer[id.x].dir))
+    //    {
+    //        
+    //        float massTrans = particleBuffer[id.x].mass * drag * length(particleBuffer[id.y].dir);
+    //        particleBuffer[id.x].mass -= massTrans;
+    //        particleBuffer[id.y].mass += massTrans;         
+    //    }
+    //    //particleBuffer[id.y].dir = (otherDir * particleBuffer[id.y].mass / mass + dir * particleBuffer[id.x].mass / mass);
+    //    //particleBuffer[id.x].mass = mass;
+    //  
+    //    //return;
+    //
+    //}  
+        
+    float2 dir = 0.0;
+    float angleToMass = atan2(otherPos.y - pos.y, otherPos.x - pos.x);
+        
+    dir.x = (cos(angleToMass) * ((particleBuffer[id.y].mass) / pow(dst, 2)));
+    dir.y = (sin(angleToMass) * ((particleBuffer[id.y].mass) / pow(dst, 2)));
+    
+    return dir;
+        
+    //particleBuffer[id.x].dir = 0;
+    //mapTex[id.xy] = float4(particleBuffer[id.y].mass / 50, 0, 0, 0);
+}
+
+float2 perpendicular(float2 v)
+{
+    return float2(-v.y, v.x);
+}
+void handleCollision(uint2 id)
+{
+    float2 pos1 = particleBuffer[id.x].pos;
+    float2 pos2 = particleBuffer[id.y].pos;
+    float2 dir1 = particleBuffer[id.x].dir;
+    float2 dir2 = particleBuffer[id.y].dir;
+    float mass1 = particleBuffer[id.x].mass;
+    float mass2 = particleBuffer[id.y].mass;
+    
+    // Calculate collision normal and tangent
+    float2 dir = pos2 - pos1;
+    float2 normal = normalize(dir);
+    float2 tangent = float2(-normal.y, normal.x);
+    
+    // Calculate velocities in normal and tangent directions
+    float v1n = dot(dir1, normal);
+    float v1t = dot(dir1, tangent);
+    float v2n = dot(dir2, normal);
+    float v2t = dot(dir2, tangent);
+    
+    // Calculate new velocities using formulas for elastic collisions
+    float v1nNew = (v1n * (mass1 - mass2) + 2 * mass2 * v2n) / (mass1 + mass2);
+    float v2nNew = (v2n * (mass2 - mass1) + 2 * mass1 * v1n) / (mass1 + mass2);
+    
+    // Update particle velocities
+    particleBuffer[id.x].dir = v1nNew * normal + v1t * tangent;
+    particleBuffer[id.y].dir = v2nNew * normal + v2t * tangent;
+}
+
+float2 calcDir2(uint2 id)
+{
+    float2 pos = particleBuffer[id.x].pos;
+    float2 otherPos = particleBuffer[id.y].pos;
+    float dst = length(pos - otherPos);
+    
+    float G = 100.0*drag; // Adjust this value to control the strength of the gravitational force
+    float F = 0.0;
+        
+    if (dst < 2.0) // Check if the particles are touching (2.0 = sum of radii)
+    {
+        handleCollision(id);
+        return float2(0, 0);
+    }
+    else
+    {
+        F = G / (dst * dst);
+        particleBuffer[id.x].pressure += F;
+        return normalize(otherPos - pos) * F;
+    }
+}
+ 
+
+[numthreads(128, 1, 1)]
+void CSMain(uint3 id : SV_DispatchThreadID)
+{
+    uint stride, count;
+    particleBuffer.GetDimensions(count, stride);
+
+    
+    if (id.x < count)
+    {
+        particleBuffer[id.x].pressure = 0;
+        
+        float2 dir;
+        for (int i = 0; i < count; i++)
+        {
+            if (id.x != i)
+                dir += calcDir2(int2(id.x, i));
+        }
+        particleBuffer[id.x].dir = particleBuffer[id.x].dir + dir;
+    }
+    else
+    {
+        
+    }
+}

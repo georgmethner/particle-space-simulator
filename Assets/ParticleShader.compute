@@ -1,0 +1,47 @@
+// Each #kernel tells which function to compile; you can have many kernels
+#pragma kernel CSMain
+
+RWTexture2D<float4> mapTex;
+
+struct Particle
+{
+    float2 pos;
+    float2 dir;
+    float mass;
+    float pressure;
+
+};
+
+RWStructuredBuffer<Particle> particleBuffer;
+
+float x1;
+
+[numthreads(128,1,1)]
+void CSMain (uint3 id : SV_DispatchThreadID)
+{
+    int2 screenSize;
+    mapTex.GetDimensions(screenSize.x, screenSize.y);
+    uint particleSize, stride;
+    particleBuffer.GetDimensions(particleSize, stride);
+    
+    float2 pos = particleBuffer[id.x].pos;
+    
+    //int2 dir = distance(screenCenter, particleBuffer[id.x]) > 1.0 ? round(clamp(normalize(particleBuffer[id.x] - distTex[particleBuffer[id.x]].xy) * x1, -1, 1)) : 0.0;
+    float2 dir = 0.0 ;
+    dir = particleBuffer[id.x].dir;
+
+    if (all(round(dir) == 0.0) || mapTex[pos + dir].a == 0.0)
+    {
+        mapTex[pos] = 0.0;
+        
+        particleBuffer[id.x].pos += dir;
+    } else
+    {
+        particleBuffer[id.x].dir = normalize(particleBuffer[id.x].dir);
+
+    }
+
+    
+    if (pos.x >= 0.0 && pos.y >= 0.0)
+        mapTex[particleBuffer[id.x].pos] = float4((particleBuffer[id.x].mass).x, (particleBuffer[id.x].pressure / 20).x, 0.0, 1.0);
+}
